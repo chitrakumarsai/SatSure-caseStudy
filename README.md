@@ -152,7 +152,53 @@ The following outputs were generated:
 
 ## **Usage**
 
-### Running the Pipeline
+### Running the Analysis
+
+You can run the complete analysis using the provided script:
+
+```bash
+python scripts/run_analysis.py
+```
+
+This will:
+1. Load and validate climate data for both states
+2. Process monthly and seasonal aggregates
+3. Calculate resilience indicators
+4. Generate crop-climate analysis
+5. Export comprehensive results to Excel
+
+### Analysis Output
+
+The script generates an Excel file (`climate_analysis_results.xlsx`) containing:
+
+1. **Executive Summary**
+   - Overall climate resilience assessment
+   - Temperature and rainfall trends
+   - Agricultural implications
+   - State-specific recommendations
+
+2. **Resilience Analysis**
+   - Temperature resilience metrics
+   - Precipitation patterns
+   - Agricultural vulnerability assessment
+   - Action recommendations
+
+3. **Monthly Analysis**
+   - Detailed monthly climate patterns
+   - Seasonal variations
+   - Agricultural planning recommendations
+
+4. **Seasonal Analysis**
+   - Kharif and Rabi season analysis
+   - Season-specific risks
+   - Management strategies
+
+5. **Crop Analysis**
+   - Climate impact on crops
+   - Region-specific vulnerabilities
+   - Adaptation strategies
+
+### Alternative Pipeline Usage
 ```python
 from src.pipeline import ClimateDataPipeline
 
