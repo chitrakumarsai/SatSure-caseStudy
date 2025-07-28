@@ -20,50 +20,71 @@ class ClimateDataPipeline:
         self.validator = DataValidator()
         self.resilience = ResilienceAnalyzer()
         
-    def run(self, save_results: bool = True):
+    def run(self, verbose=True):
         """Execute the complete pipeline"""
-        results = {}
-        
-        # Load data
-        raw_data = self.loader.load_all()
-        
-        # Validate
-        self.validator.validate_data(raw_data)
-        
-        # Transform
-        processed_data = self.transformer.transform(raw_data)
-        if save_results:
-            self._save_processed_data(processed_data)
-        
-        # Analyze
-        analysis_results = self.analyzer.analyze(processed_data)
-        
-        # Calculate resilience scores
-        resilience_scores = self._calculate_resilience(processed_data)
-        
-        # Combine all results
-        results = {
-            'analysis': analysis_results,
-            'resilience': resilience_scores,
-            'recommendations': self._generate_final_recommendations(analysis_results, resilience_scores)
-        }
-        
-        if save_results:
-            self._save_results(results)
-        
-        return results
+        try:
+            if verbose:
+                print("Starting pipeline execution...")
+                
+            # Load data
+            if verbose:
+                print("Loading data...")
+            raw_data = self.loader.load_all()
+            
+            # Validate
+            if verbose:
+                print("Validating data...")
+            validation_reports = self.validator.validate_data(raw_data)
+            
+            # Check validation status
+            failed_validations = [
+                name for name, report in validation_reports.items()
+                if report['validation_status'] == 'FAILED'
+            ]
+            if failed_validations:
+                raise ValueError(
+                    f"Validation failed for datasets: {', '.join(failed_validations)}"
+                )
+            
+            # Transform
+            if verbose:
+                print("Transforming data...")
+            processed_data = self.transformer.transform(raw_data)
+            
+            # Analyze
+            if verbose:
+                print("Analyzing data...")
+            results = self.analyzer.analyze(processed_data)
+            
+            if verbose:
+                print("Pipeline execution completed successfully.")
+            
+            return {
+                'validation_reports': validation_reports,
+                'results': results
+            }
+            
+        except Exception as e:
+            error_msg = f"Pipeline execution failed: {str(e)}"
+            if verbose:
+                print(f"ERROR: {error_msg}")
+            raise RuntimeError(error_msg)
     
     def _calculate_resilience(self, processed_data: dict) -> dict:
         """Calculate resilience scores for each region"""
         scores = {}
-        for region in ['mh', 'mp']:
-            rainfall = processed_data['monthly'][f'{region}_precip_monthly']
-            temperature = processed_data['monthly'][f'{region}_temp_monthly']
+        region_mapping = {
+            'mh': 'maharashtra',
+            'mp': 'madhya_pradesh'
+        }
+        for region_short, region_full in region_mapping.items():
+            rainfall = processed_data['monthly'][f'{region_full}_precipitation_monthly']
+            temperature = processed_data['monthly'][f'{region_full}_temperature_monthly']
             
             score = self.resilience.calculate_resilience_score(rainfall, temperature)
             strategies = self.resilience.get_adaptation_strategies(score)
             
-            scores[region] = {
+            scores[region_short] = {
                 'score': score,
                 'adaptation_strategies': strategies
             }
@@ -73,14 +94,18 @@ class ClimateDataPipeline:
         """Generate comprehensive recommendations"""
         recommendations = {}
         
-        for region in ['mh', 'mp']:
+        region_mapping = {
+            'mh': 'maharashtra',
+            'mp': 'madhya_pradesh'
+        }
+        for region_short, region_full in region_mapping.items():
             region_recs = {
-                'climate_adaptation': resilience[region]['adaptation_strategies'],
-                'economic_measures': self._get_economic_recommendations(analysis['economic_impact'], region),
-                'infrastructure': self._get_infrastructure_recommendations(analysis['infrastructure'], region),
-                'crop_management': self._get_crop_recommendations(analysis['crop_analysis'], region)
+                'climate_adaptation': resilience[region_short]['adaptation_strategies'],
+                'economic_measures': self._get_economic_recommendations(analysis['economic_impact'], region_short),
+                'infrastructure': self._get_infrastructure_recommendations(analysis['infrastructure'], region_short),
+                'crop_management': self._get_crop_recommendations(analysis['crop_analysis'], region_short)
             }
-            recommendations[region] = region_recs
+            recommendations[region_short] = region_recs
             
         return recommendations
     

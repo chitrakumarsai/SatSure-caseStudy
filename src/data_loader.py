@@ -10,16 +10,60 @@ class DataLoader:
         
     def load_all(self) -> dict:
         """Load all climate data files"""
-        data = {}
-        data['mh_precip'] = self._load_csv('MH_precipitation.csv')
-        data['mh_temp'] = self._load_csv('MH_temperature.csv')
-        data['mp_precip'] = self._load_csv('MP_precipitation.csv')
-        data['mp_temp'] = self._load_csv('MP_temperature.csv')
-        return data
+        try:
+            data = {}
+            # Load Maharashtra data
+            mh_precip = self._load_csv('MH_precipitation.csv')
+            mh_temp = self._load_csv('MH_temperature.csv')
+            # Load Madhya Pradesh data
+            mp_precip = self._load_csv('MP_precipitation.csv')
+            mp_temp = self._load_csv('MP_temperature.csv')
+            
+            # Store with consistent keys
+            data = {
+                'maharashtra_precipitation': mh_precip,
+                'maharashtra_temperature': mh_temp,
+                'madhya_pradesh_precipitation': mp_precip,
+                'madhya_pradesh_temperature': mp_temp
+            }
+            
+            print("Data loaded successfully:")
+            for key, df in data.items():
+                print(f"{key}: {len(df)} records")
+            
+            return data
+            
+        except Exception as e:
+            raise RuntimeError(f"Error loading data: {str(e)}")
     
     def _load_csv(self, filename: str) -> pd.DataFrame:
         """Load and basic preprocessing of CSV files"""
-        file_path = self.data_path / filename
-        df = pd.read_csv(file_path)
-        df['date'] = pd.to_datetime(df['date'])
-        return df
+        try:
+            file_path = self.data_path / filename
+            if not file_path.exists():
+                raise FileNotFoundError(f"Data file not found: {filename}")
+                
+            # Read CSV with specific data types
+            df = pd.read_csv(file_path)
+            
+            # Convert date column
+            try:
+                df['date'] = pd.to_datetime(df['date'])
+            except Exception as e:
+                raise ValueError(f"Error converting date column in {filename}: {str(e)}")
+            
+            # Convert numeric columns based on file type
+            if 'precipitation' in filename:
+                df['rainfall_mm'] = pd.to_numeric(df['rainfall_mm'], errors='coerce')
+            elif 'temperature' in filename:
+                df['mean'] = pd.to_numeric(df['mean'], errors='coerce')
+                
+            # Check for missing values after conversion
+            missing = df.isnull().sum()
+            if missing.any():
+                print(f"Warning: Found {missing.sum()} missing values in {filename}")
+                
+            return df
+            
+        except Exception as e:
+            raise RuntimeError(f"Error loading {filename}: {str(e)}")

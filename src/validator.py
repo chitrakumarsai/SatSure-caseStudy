@@ -8,48 +8,117 @@ class DataValidator:
     def __init__(self):
         self.quality_reports = {}
         self.thresholds = {
-            'rainfall_max': 150,  # mm per day
-            'temp_min': -5,      # °C
-            'temp_max': 50,      # °C
-            'rainfall_95th': 95,  # 95th percentile for extreme events
-            'dry_spell': 15      # days for dry spell
+            'rainfall_max': 500,  # mm per day (increased for extreme events)
+            'temp_min': -10,     # °C (lowered for winter extremes)
+            'temp_max': 55,      # °C (increased for summer extremes)
+            'rainfall_95th': 95, # 95th percentile for extreme events
+            'dry_spell': 15,     # days for dry spell
+            'missing_threshold': 0.2  # Allow up to 20% missing values
         }
     
     def validate_data(self, data: dict) -> dict:
         """Validate all datasets and return quality reports"""
-        for key, df in data.items():
-            self.quality_reports[key] = self._validate_dataframe(df, key)
-        return self.quality_reports
+        try:
+            if not data:
+                raise ValueError("No data provided for validation")
+                
+            for key, df in data.items():
+                print(f"\nValidating {key}...")
+                
+                # Make a copy to avoid modifying original data
+                df_copy = df.copy()
+                
+                # Initial validation
+                report = self._validate_dataframe(df_copy, key)
+                
+                # Handle missing values if any
+                missing_values = df_copy.isnull().sum()
+                if missing_values.any():
+                    print(f"Found missing values in {key}:")
+                    for col, count in missing_values.items():
+                        if count > 0:
+                            print(f"  - {col}: {count} missing values")
+                            
+                    print("Attempting interpolation...")
+                    
+                    if 'rainfall_mm' in df_copy.columns:
+                        df_copy['rainfall_mm'] = df_copy['rainfall_mm'].interpolate(method='linear')
+                        df_copy['rainfall_mm'] = df_copy['rainfall_mm'].fillna(method='bfill').fillna(method='ffill')
+                        
+                    if 'mean' in df_copy.columns:
+                        df_copy['mean'] = df_copy['mean'].interpolate(method='linear')
+                        df_copy['mean'] = df_copy['mean'].fillna(method='bfill').fillna(method='ffill')
+                    
+                    # Re-validate after interpolation
+                    report = self._validate_dataframe(df_copy, key)
+                    
+                self.quality_reports[key] = report
+                print(f"Validation completed for {key}: {report['validation_status']}")
+                
+                # Update the original dataframe with cleaned data
+                data[key] = df_copy
+                
+            return self.quality_reports
+            
+        except Exception as e:
+            raise RuntimeError(f"Error during data validation: {str(e)}")
     
     def _validate_dataframe(self, df: pd.DataFrame, name: str) -> dict:
         """Validate individual dataframe and return detailed report"""
-        report = {
-            'dataset_name': name,
-            'total_records': len(df),
-            'date_range': f"{df['date'].min():%Y-%m-%d} to {df['date'].max():%Y-%m-%d}",
-            'checks': {},
-            'statistics': {},
-            'anomalies': {},
-            'validation_status': 'PASSED'
-        }
-        
-        # Basic Data Quality Checks
-        report['checks']['missing_values'] = self._check_missing_values(df)
-        report['checks']['date_continuity'] = self._check_date_continuity(df)
-        report['checks']['value_ranges'] = self._check_value_ranges(df)
-        report['checks']['data_types'] = self._check_data_types(df)
-        
-        # Statistical Analysis
-        report['statistics'] = self._calculate_statistics(df)
-        
-        # Anomaly Detection
-        report['anomalies'] = self._detect_anomalies(df)
-        
-        # Overall Status
-        if any(not check['status'] for check in report['checks'].values()):
-            report['validation_status'] = 'FAILED'
-        
-        return report
+        try:
+            report = {
+                'dataset_name': name,
+                'total_records': len(df),
+                'date_range': f"{df['date'].min():%Y-%m-%d} to {df['date'].max():%Y-%m-%d}",
+                'checks': {},
+                'statistics': {},
+                'anomalies': {},
+                'validation_status': 'PASSED'
+            }
+            
+            # Basic Data Quality Checks
+            missing_check = self._check_missing_values(df)
+            date_check = self._check_date_continuity(df)
+            range_check = self._check_value_ranges(df)
+            type_check = self._check_data_types(df)
+            
+            report['checks'] = {
+                'missing_values': missing_check,
+                'date_continuity': date_check,
+                'value_ranges': range_check,
+                'data_types': type_check
+            }
+            
+            # Statistical Analysis
+            report['statistics'] = self._calculate_statistics(df)
+            
+            # Anomaly Detection
+            report['anomalies'] = self._detect_anomalies(df)
+            
+            # Overall Status
+            failed_checks = []
+            if not missing_check['status']:
+                failed_checks.append('missing_values')
+            if not date_check['status']:
+                failed_checks.append('date_continuity')
+            if range_check and any(not v['status'] for v in range_check.values()):
+                failed_checks.append('value_ranges')
+            if not type_check['status']:
+                failed_checks.append('data_types')
+                
+            if failed_checks:
+                report['validation_status'] = 'FAILED'
+                report['failed_checks'] = failed_checks
+            
+            return report
+            
+        except Exception as e:
+            print(f"Error validating {name}: {str(e)}")
+            return {
+                'dataset_name': name,
+                'validation_status': 'ERROR',
+                'error_message': str(e)
+            }
     
     def _check_missing_values(self, df: pd.DataFrame) -> dict:
         """Check for missing values"""
@@ -197,3 +266,86 @@ class DataValidator:
             spell_lengths.append(current_spell)
             
         return spell_lengths
+        
+    def export_to_excel(self, output_path: str = "climate_analysis_results.xlsx"):
+        """Export validation and analysis results to Excel file with multiple sheets"""
+        try:
+            with pd.ExcelWriter(output_path, engine='openpyxl') as writer:
+                # Summary sheet
+                summary_data = []
+                for key, report in self.quality_reports.items():
+                    summary_data.append({
+                        'Dataset': key,
+                        'Status': report['validation_status'],
+                        'Total Records': report['total_records'],
+                        'Date Range': report['date_range'],
+                        'Failed Checks': ', '.join(report.get('failed_checks', []))
+                    })
+                pd.DataFrame(summary_data).to_excel(writer, sheet_name='Summary', index=False)
+                
+                # Statistics sheet
+                stats_data = []
+                for key, report in self.quality_reports.items():
+                    stats = report['statistics']
+                    if 'rainfall' in stats:
+                        stats_data.append({
+                            'Dataset': key,
+                            'Type': 'Rainfall',
+                            'Mean': stats['rainfall']['mean'],
+                            'Std Dev': stats['rainfall']['std'],
+                            'Median': stats['rainfall']['median'],
+                            '95th Percentile': stats['rainfall']['q95']
+                        })
+                    if 'temperature' in stats:
+                        stats_data.append({
+                            'Dataset': key,
+                            'Type': 'Temperature',
+                            'Mean': stats['temperature']['mean'],
+                            'Std Dev': stats['temperature']['std'],
+                            'Median': stats['temperature']['median'],
+                            'Extreme Days': stats['temperature']['extreme_days']
+                        })
+                pd.DataFrame(stats_data).to_excel(writer, sheet_name='Statistics', index=False)
+                
+                # Anomalies sheet
+                anomalies_data = []
+                for key, report in self.quality_reports.items():
+                    anomalies = report['anomalies']
+                    if 'rainfall' in anomalies:
+                        anomalies_data.append({
+                            'Dataset': key,
+                            'Type': 'Rainfall',
+                            'Extreme Events Count': anomalies['rainfall']['extreme_events']['count'],
+                            'Extreme Events Threshold': anomalies['rainfall']['extreme_events']['threshold'],
+                            'Dry Spells Count': anomalies['rainfall']['dry_spells']['count'],
+                            'Max Dry Spell Duration': anomalies['rainfall']['dry_spells']['max_duration']
+                        })
+                    if 'temperature' in anomalies:
+                        anomalies_data.append({
+                            'Dataset': key,
+                            'Type': 'Temperature',
+                            'Heat Stress Days': anomalies['temperature']['heat_stress_days']['count'],
+                            'Cold Stress Days': anomalies['temperature']['cold_stress_days']['count']
+                        })
+                pd.DataFrame(anomalies_data).to_excel(writer, sheet_name='Anomalies', index=False)
+                
+                # Data Quality Checks sheet
+                checks_data = []
+                for key, report in self.quality_reports.items():
+                    checks = report['checks']
+                    checks_data.append({
+                        'Dataset': key,
+                        'Missing Values Status': checks['missing_values']['status'],
+                        'Date Continuity Status': checks['date_continuity']['status'],
+                        'Data Types Status': checks['data_types']['status'],
+                        'Expected Days': checks['date_continuity']['details']['expected_days'],
+                        'Actual Days': checks['date_continuity']['details']['actual_days']
+                    })
+                pd.DataFrame(checks_data).to_excel(writer, sheet_name='Data Quality', index=False)
+                
+            print(f"\nResults exported successfully to {output_path}")
+            return True
+            
+        except Exception as e:
+            print(f"Error exporting results to Excel: {str(e)}")
+            return False

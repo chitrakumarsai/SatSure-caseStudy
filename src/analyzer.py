@@ -3,7 +3,6 @@ Climate data analysis module.
 """
 import pandas as pd
 import numpy as np
-
 class ClimateAnalyzer:
     def __init__(self):
         self.crop_info = {
@@ -16,9 +15,11 @@ class ClimateAnalyzer:
         
     def analyze(self, data: dict) -> dict:
         """Perform climate data analysis"""
+        print("Data received by analyzer:", data.keys())
         results = {}
         
         # Classify seasons
+        print("Seasonal data keys:", data['seasonal'].keys())
         results['classification'] = self._classify_seasons(data['seasonal'])
         
         # Economic impact
@@ -55,7 +56,7 @@ class ClimateAnalyzer:
             score -= drought_penalty
             
             # Temperature anomaly penalty
-            temp_penalty = resilience_data[f'{region}_temp_temp_anomaly'] * 10
+            temp_penalty = resilience_data[f'{region}_temp_anomaly'] * 10
             score -= temp_penalty
             
             analysis[f'{region}_resilience_score'] = max(0, min(100, score))
@@ -66,23 +67,32 @@ class ClimateAnalyzer:
         """Assess infrastructure vulnerability"""
         assessment = {}
         
-        for region in ['mh', 'mp']:
+        region_mapping = {
+            'mh': 'maharashtra',
+            'mp': 'madhya_pradesh'
+        }
+        
+        for region_short, region_full in region_mapping.items():
             # Analyze extreme weather patterns
-            precip_data = data['monthly'][f'{region}_precip_monthly']
-            temp_data = data['monthly'][f'{region}_temp_monthly']
+            precip_data = data['monthly'][f'{region_full}_precipitation_monthly']
+            temp_data = data['monthly'][f'{region_full}_temperature_monthly']
+            
+            # Get the values from DataFrames
+            precip_rainfall = precip_data['rainfall_mm']
+            temp_mean = temp_data['mean']
             
             # Count extreme rainfall events (>95th percentile)
-            extreme_rain_threshold = precip_data.quantile(0.95)
-            extreme_rain_freq = (precip_data > extreme_rain_threshold).mean()
+            extreme_rain_threshold = float(precip_rainfall.quantile(0.95))
+            extreme_rain_freq = float((precip_rainfall > extreme_rain_threshold).mean())
             
             # Count extreme temperature events
-            extreme_temp_threshold = temp_data.quantile(0.95)
-            extreme_temp_freq = (temp_data > extreme_temp_threshold).mean()
+            extreme_temp_threshold = float(temp_mean.quantile(0.95))
+            extreme_temp_freq = float((temp_mean > extreme_temp_threshold).mean())
             
             # Infrastructure risk score (0-100)
             risk_score = (extreme_rain_freq * 50) + (extreme_temp_freq * 50)
             
-            assessment[f'{region}_infrastructure_risk'] = min(100, risk_score * 100)
+            assessment[f'{region_short}_infrastructure_risk'] = min(100, risk_score * 100)
             
         return assessment
         
@@ -96,8 +106,10 @@ class ClimateAnalyzer:
             adequate_rain = data['rainfall_mm'] >= 5  # daily minimum
             
             # Calculate stress days
-            stress_days = (~optimal_temp) | (~adequate_rain)
-            stress_percentage = stress_days.mean() * 100
+            optimal_temp = optimal_temp.fillna(False)  # Handle any NaN values
+            adequate_rain = adequate_rain.fillna(False)
+            stress_days = optimal_temp.eq(False) | adequate_rain.eq(False)
+            stress_percentage = float(stress_days.mean() * 100)
             
             analysis[f'{region_season}_stress'] = stress_percentage
             
@@ -107,28 +119,33 @@ class ClimateAnalyzer:
         """Generate region-specific recommendations"""
         recommendations = {}
         
-        for region in ['mh', 'mp']:
+        region_mapping = {
+            'mh': 'maharashtra',
+            'mp': 'madhya_pradesh'
+        }
+        
+        for region_short, region_full in region_mapping.items():
             region_recs = []
             
             # Climate resilience recommendations
-            resilience_score = results['resilience'][f'{region}_resilience_score']
+            resilience_score = float(results['resilience'][f'{region_short}_resilience_score'])
             if resilience_score < 50:
                 region_recs.append("Implement drought-resistant crop varieties")
                 region_recs.append("Develop water conservation infrastructure")
             
             # Infrastructure recommendations
-            infra_risk = results['infrastructure'][f'{region}_infrastructure_risk']
+            infra_risk = float(results['infrastructure'][f'{region_short}_infrastructure_risk'])
             if infra_risk > 70:
                 region_recs.append("Strengthen weather monitoring systems")
                 region_recs.append("Improve drainage infrastructure")
             
             # Crop-specific recommendations
-            kharif_stress = results['crop_analysis'][f'{region}_kharif_stress']
+            kharif_stress = float(results['crop_analysis'][f'{region_full}_kharif_stress'])
             if kharif_stress > 30:
                 region_recs.append("Consider shifting kharif sowing dates")
                 region_recs.append("Implement soil moisture conservation practices")
             
-            recommendations[region] = region_recs
+            recommendations[region_short] = region_recs
             
         return recommendations
     
@@ -138,8 +155,8 @@ class ClimateAnalyzer:
         for key, series in seasonal_data.items():
             mean_rain = series.mean()
             classification[key] = series.apply(
-                lambda x: "Drought" if x < 0.8 * mean_rain 
-                else ("Excess Rain" if x > 1.2 * mean_rain else "Normal")
+                lambda x: "Drought" if float(x) < 0.8 * float(mean_rain)
+                else ("Excess Rain" if float(x) > 1.2 * float(mean_rain) else "Normal")
             )
         return classification
     
@@ -149,10 +166,13 @@ class ClimateAnalyzer:
         
         loss_data = []
         for region_key, status_series in classification.items():
-            region = "Maharashtra" if "mh" in region_key else "Madhya Pradesh"
+            # Extract region and season from key
+            region = region_key.split('_')[0]  # 'mh' or 'mp'
+            region = "Maharashtra" if region == "mh" else "Madhya Pradesh"
             season = "Kharif" if "kharif" in region_key else "Rabi"
             
-            for year, status in status_series.items():
+            for year in status_series.index:
+                status = status_series[year]
                 for crop, vals in self.crop_info.items():
                     yield_loss_pct = impact_map[status]
                     base_yield = vals['area'] * vals['yield']

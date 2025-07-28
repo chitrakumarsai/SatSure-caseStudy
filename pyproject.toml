@@ -17,6 +17,7 @@ dependencies = [
     "earthengine-api>=1.6.0",
     "geemap>=0.36.0",
     "torch>=2.7.1",
+    "openpyxl>=3.1.5",
 ]
 
 [tool.pytest.ini_options]
