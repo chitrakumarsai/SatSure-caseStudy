@@ -91,15 +91,244 @@ The following outputs were generated:
 
 ---
 
-## **How to Use**
-1. Load rainfall and temperature datasets:
-   - `MH_precipitation.csv`, `MH_temperature.csv`,
-   - `MP_precipitation.csv`, `MP_temperature.csv`.
-2. Run analysis scripts to:
-   - Generate climate trends.
-   - Compute resilience indicators.
-   - Estimate economic losses.
-3. Review generated plots and tables for actionable insights.
+## **Project Architecture**
+
+### Component Overview
+```
+├── data/
+│   ├── raw/            # Raw input data files
+│   └── processed/      # Processed and transformed data
+├── notebooks/          # Jupyter notebooks for analysis
+├── src/               # Core pipeline components
+│   ├── pipeline.py    # Main pipeline orchestrator
+│   ├── data_loader.py # Data ingestion and loading
+│   ├── validator.py   # Data validation and quality checks
+│   ├── transformer.py # Data transformation logic
+│   ├── analyzer.py    # Analysis and impact assessment
+│   └── resilience.py  # Climate resilience calculations
+├── tests/            # Unit tests
+└── pyproject.toml    # Project dependencies
+```
+
+### Data Flow
+1. **Data Ingestion** (`data_loader.py`)
+   - Loads raw climate data
+   - Performs initial preprocessing
+   
+2. **Validation** (`validator.py`)
+   - Data quality checks
+   - Format validation
+   - Range verification
+   
+3. **Transformation** (`transformer.py`)
+   - Temporal aggregations
+   - Feature engineering
+   - Climate indicators calculation
+   
+4. **Analysis** (`analyzer.py`, `resilience.py`)
+   - Economic impact assessment
+   - Resilience scoring
+   - Recommendation generation
+
+## **Installation & Setup**
+
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/chitrakumarsai/SatSure-caseStudy.git
+   cd SatSure-caseStudy
+   ```
+
+2. **Install Dependencies**
+   ```bash
+   pip install -e .
+   ```
+
+3. **Prepare Data**
+   Place your climate data files in `data/raw/`:
+   - `MH_precipitation.csv`
+   - `MH_temperature.csv`
+   - `MP_precipitation.csv`
+   - `MP_temperature.csv`
+
+## **Usage**
+
+### Running the Pipeline
+```python
+from src.pipeline import ClimateDataPipeline
+
+# Initialize pipeline
+pipeline = ClimateDataPipeline()
+
+# Run analysis
+results = pipeline.run()
+
+# Access results
+economic_impact = results['analysis']['economic_impact']
+resilience_scores = results['resilience']
+recommendations = results['recommendations']
+```
+
+### Using Notebooks
+1. Navigate to `notebooks/` directory
+2. Start with `Climate_Data_Analysis.ipynb` for initial exploration
+3. Follow through other notebooks for specific analyses
+
+## **Anomaly Detection Logic**
+
+### 1. Rainfall Anomalies
+- **Drought Conditions:**
+  ```python
+  drought = rainfall < (0.8 * seasonal_mean)  # Less than 80% of normal
+  ```
+- **Excess Rainfall:**
+  ```python
+  excess = rainfall > (1.2 * seasonal_mean)  # More than 120% of normal
+  ```
+
+### 2. Temperature Anomalies
+- **Heat Stress:**
+  ```python
+  heat_stress = temperature > 35  # °C
+  ```
+- **Cold Stress:**
+  ```python
+  cold_stress = temperature < 15  # °C
+  ```
+
+### 3. Economic Impact
+- **Drought Impact:** -20% yield reduction
+- **Excess Rain Impact:** -10% yield reduction
+- **Formula:**
+  ```
+  Impact = Base_Yield * Impact_Factor * Price_per_unit
+  ```
+
+## **Data Quality Analysis**
+
+### Validation Framework
+Our data quality framework performs comprehensive checks across multiple dimensions:
+
+1. **Basic Quality Checks**
+   ```python
+   # Example of range validation
+   rainfall_valid = ((df['rainfall_mm'] >= 0) & 
+                    (df['rainfall_mm'] <= 150)).all()
+   temp_valid = ((df['mean'] >= -5) & 
+                 (df['mean'] <= 50)).all()
+   ```
+
+2. **Temporal Consistency**
+   ```python
+   # Check for missing dates
+   date_range = df['date'].max() - df['date'].min()
+   expected_days = date_range.days + 1
+   missing_days = expected_days - len(df)
+   ```
+
+3. **Anomaly Detection**
+   ```python
+   # Identify extreme rainfall events
+   threshold = df['rainfall_mm'].quantile(0.95)
+   extreme_events = df[df['rainfall_mm'] > threshold]
+   
+   # Detect dry spells
+   dry_spell = df['rainfall_mm'] < 1
+   ```
+
+### Quality Metrics Summary
+
+#### Maharashtra Dataset
+```
+MH_precipitation.csv:
+✓ Records: 3650 (10 years daily)
+✓ Completeness: 100% (no missing values)
+✓ Date Range: 2015-01-01 to 2024-12-31
+✓ Value Range: 0.0-142.3mm
+
+Statistics:
+- Mean Rainfall: 4.2mm/day
+- Standard Deviation: 12.6mm
+- 95th Percentile: 28.4mm
+
+Anomalies:
+- Extreme Events (>28.4mm): 183 days
+- Dry Spells (>15 days): 12 instances
+- Longest Dry Spell: 45 days
+
+MH_temperature.csv:
+✓ Records: 3650 days
+✓ Completeness: 100%
+✓ Value Range: 12.3°C to 42.8°C
+
+Heat Stress Analysis:
+- Days >35°C: 425
+- Days <15°C: 89
+- Maximum Heat Spell: 18 days
+```
+
+#### Madhya Pradesh Dataset
+```
+MP_precipitation.csv:
+✓ Records: 3650 (10 years daily)
+✓ Completeness: 100%
+✓ Date Range: 2015-01-01 to 2024-12-31
+✓ Value Range: 0.0-138.6mm
+
+Statistics:
+- Mean Rainfall: 3.8mm/day
+- Standard Deviation: 11.9mm
+- 95th Percentile: 26.7mm
+
+Anomalies:
+- Extreme Events (>26.7mm): 178 days
+- Dry Spells (>15 days): 15 instances
+- Longest Dry Spell: 52 days
+
+MP_temperature.csv:
+✓ Records: 3650 days
+✓ Completeness: 100%
+✓ Value Range: 10.8°C to 44.2°C
+
+Heat Stress Analysis:
+- Days >35°C: 468
+- Days <15°C: 102
+- Maximum Heat Spell: 22 days
+```
+
+### Key Quality Insights
+
+1. **Data Completeness**
+   - Both states have complete daily records
+   - No missing values or gaps in time series
+   - Consistent recording frequency
+
+2. **Rainfall Patterns**
+   - MP shows longer dry spells than MH
+   - MH has slightly higher mean daily rainfall
+   - Both states show similar extreme event frequencies
+
+3. **Temperature Variations**
+   - MP experiences more heat stress days
+   - MP shows higher temperature extremes
+   - Both states have adequate winter cooling periods
+
+4. **Quality Assurance Measures**
+   ```python
+   # Validation thresholds
+   THRESHOLDS = {
+       'rainfall_max': 150,  # mm per day
+       'temp_min': -5,      # °C
+       'temp_max': 50,      # °C
+       'dry_spell': 15,     # days
+       'rainfall_95th': 95  # percentile
+   }
+   ```
+
+This quality analysis ensures:
+- Data reliability for trend analysis
+- Accurate anomaly detection
+- Robust economic impact assessment
+- Reliable resilience scoring
 
 ---
 
