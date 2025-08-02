@@ -157,6 +157,7 @@ The following outputs were generated:
 You can run the complete analysis using the provided script:
 
 ```bash
+uv sync
 python scripts/run_analysis.py
 ```
 
