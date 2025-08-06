@@ -1,49 +1,63 @@
-# #!/usr/bin/env python3
-# """
-# Test script to run the climate analysis pipeline
-# """
-# import os
-# import sys
-# from pathlib import Path
+import pandas as pd
+from src.data_loader import DataLoader
+from src.validator import DataValidator
+from src.transformer import DataTransformer
+from src.analyzer import ClimateAnalyzer
 
-# # Add project root to Python path
-# project_root = Path(__file__).parent.parent
-# sys.path.append(str(project_root))
 
-# from src.pipeline import ClimateDataPipeline
+def run_climate_analysis():
+    loader = DataLoader()
+    validator = DataValidator()
+    transformer = DataTransformer()
+    analyzer = ClimateAnalyzer()
 
-# def main():
-#     """Run the pipeline and display results"""
-#     try:
-#         print("Initializing pipeline...")
-#         pipeline = ClimateDataPipeline()
-        
-#         print("\nRunning pipeline...")
-#         results = pipeline.run(verbose=True)
-        
-#         print("\nPipeline Results:")
-#         print("-" * 50)
-        
-#         # Display validation results
-#         print("\nValidation Summary:")
-#         for dataset, report in results['validation_reports'].items():
-#             print(f"\n{dataset}:")
-#             print(f"Status: {report['validation_status']}")
-#             print(f"Records: {report['total_records']}")
-#             print(f"Date Range: {report['date_range']}")
-            
-#             # Show any anomalies
-#             if 'anomalies' in report:
-#                 print("\nAnomalies detected:")
-#                 for type_, anomaly in report['anomalies'].items():
-#                     print(f"{type_}: {anomaly}")
-        
-#         print("\nPipeline completed successfully!")
-        
-#     except Exception as e:
-#         print(f"\nERROR: Pipeline execution failed!")
-#         print(f"Reason: {str(e)}")
-#         sys.exit(1)
+    # 1. Load raw data
+    raw_data = loader.load_all()
 
-# if __name__ == "__main__":
-#     main()
+    # 2. Validate datasets
+    validation_reports = validator.validate_data(raw_data)
+
+    # 3. Transform data (monthly/seasonal/crop/resilience aggregates)
+    transformed_data = transformer.transform(raw_data)
+
+    # 4. Analyze and capture results
+    results = analyzer.analyze(transformed_data)
+
+    # 5. Export everything to Excel
+    with pd.ExcelWriter("climate_analysis_results.xlsx") as writer:
+        # Existing transformed data sheets
+        transformed_data["monthly"].to_excel(writer, sheet_name="Monthly", index=False)
+        transformed_data["seasonal"].to_excel(writer, sheet_name="Seasonal", index=False)
+        transformed_data["crop"].to_excel(writer, sheet_name="Crop", index=False)
+
+        # New sheets from analyzer results
+        # a. Resilience scores
+        resilience_df = pd.DataFrame(results["resilience"].items(),
+                                     columns=["Region_Metric", "Score"])
+        resilience_df.to_excel(writer, sheet_name="Resilience_Scores", index=False)
+
+        # b. Economic impact
+        results["economic_impact"].to_excel(writer, sheet_name="Economic_Impact", index=False)
+
+        # c. Infrastructure risk
+        infrastructure_df = pd.DataFrame(results["infrastructure"].items(),
+                                         columns=["Region", "Infrastructure_Risk_Score"])
+        infrastructure_df.to_excel(writer, sheet_name="Infrastructure_Risk", index=False)
+
+        # d. Crop stress analysis
+        crop_stress_df = pd.DataFrame(results["crop_analysis"].items(),
+                                      columns=["Region_Season", "Stress_Percentage"])
+        crop_stress_df.to_excel(writer, sheet_name="Crop_Stress", index=False)
+
+        # e. Recommendations
+        recommendation_df = pd.DataFrame.from_dict(results["recommendations"], orient="index")
+        recommendation_df.reset_index(inplace=True)
+        recommendation_df.columns = ["Region", "Recommendations"]
+        recommendation_df.to_excel(writer, sheet_name="Recommendations", index=False)
+
+    # Optional: log summary
+    print("\nSummary of Analysis Results:")
+    for key, value in results.items():
+        print(f"{key}: {'[DataFrame]' if isinstance(value, pd.DataFrame) else 'dict'}")
+
+    return results, validation_reports
